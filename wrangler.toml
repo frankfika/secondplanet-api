@@ -1,0 +1,17 @@
+name = "secondplanet-api"
+main = "src/index.ts"
+compatibility_date = "2024-12-30"
+compatibility_flags = ["nodejs_compat"]
+
+[vars]
+ENVIRONMENT = "production"
+
+# R2 存储桶绑定 (启用 R2 后取消注释)
+# [[r2_buckets]]
+# binding = "UPLOADS"
+# bucket_name = "secondplanet-uploads"
+
+# 环境变量在 Cloudflare Dashboard 中设置:
+# DATABASE_URL - Neon PostgreSQL 连接字符串
+# JWT_SECRET - JWT 密钥
+# JWT_REFRESH_SECRET - JWT 刷新密钥

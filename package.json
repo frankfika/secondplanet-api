@@ -1,0 +1,32 @@
+{
+  "name": "secondplanet-api",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "db:generate": "prisma generate",
+    "db:push": "prisma db push",
+    "db:migrate": "prisma migrate deploy"
+  },
+  "dependencies": {
+    "@hono/zod-validator": "^0.4.0",
+    "@neondatabase/serverless": "^0.10.0",
+    "@prisma/adapter-neon": "^5.22.0",
+    "@prisma/client": "^5.22.0",
+    "bcryptjs": "^2.4.3",
+    "bs58": "^6.0.0",
+    "ethers": "^6.16.0",
+    "hono": "^4.6.0",
+    "jose": "^5.9.0",
+    "tweetnacl": "^1.0.3",
+    "tweetnacl-util": "^0.15.1",
+    "zod": "^3.23.0"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20241230.0",
+    "prisma": "^5.22.0",
+    "typescript": "^5.6.0",
+    "wrangler": "^4.0.0"
+  }
+}

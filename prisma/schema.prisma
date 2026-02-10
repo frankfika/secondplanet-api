@@ -1,0 +1,329 @@
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["driverAdapters"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String  @id @default(uuid())
+  email        String? @unique
+  phone        String? @unique
+  passwordHash String?
+
+  // Global Profile
+  name     String
+  avatar   String?
+  globalId String  @unique @default(cuid())
+
+  // Third-party login
+  wechatOpenId  String? @unique
+  wechatUnionId String?
+  appleId       String? @unique
+
+  // Web3 Wallets
+  solanaAddress String? @unique
+  evmAddress    String? @unique
+
+  // Optional contact info
+  location String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  memberships     Membership[]
+  posts           Post[]
+  comments        Comment[]
+  likes           Like[]
+  organizedEvents Event[]        @relation("Organizer")
+  eventRsvps      EventRsvp[]
+  notifications   Notification[]
+
+  @@index([email])
+  @@index([phone])
+  @@index([wechatOpenId])
+  @@index([solanaAddress])
+  @@index([evmAddress])
+}
+
+model Planet {
+  id           String  @id @default(uuid())
+  name         String
+  slug         String  @unique
+  category     String
+  description  String
+  announcement String?
+  coverImage   String  @default("https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&w=1000&q=80")
+  icon         String  @default("https://images.unsplash.com/photo-1515879218367-8466d910aaa4?auto=format&fit=crop&w=100&q=80")
+
+  // Economy
+  currencyName   String @default("Coins")
+  currencySymbol String @default("🪙")
+
+  // Privacy
+  visibility String  @default("public")
+  inviteCode String?
+
+  // Rules (JSON array stored as string)
+  constitution String @default("[]")
+
+  // Point Rules (JSON: {"post": 5, "comment": 1, "rsvp": 10, "like_received": 1})
+  pointRules String @default("{\"post\": 5, \"comment\": 1, \"rsvp\": 10, \"like_received\": 1}")
+
+  // Stats
+  memberCount Int @default(0)
+
+  ownerId   String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  memberships Membership[]
+  posts       Post[]
+  events      Event[]
+  quests      Quest[]
+
+  @@index([visibility])
+  @@index([category])
+  @@index([slug])
+}
+
+model Membership {
+  id       String @id @default(uuid())
+  userId   String
+  planetId String
+
+  // Local Profile
+  nickname    String
+  bio         String  @default("")
+  localAvatar String?
+  status      String?
+
+  // Roles: starLord(星主), elder(元老), pioneer(先驱者), citizen(星民)
+  role String @default("citizen")
+
+  // Privacy settings
+  showEmail    Boolean @default(true)
+  showPhone    Boolean @default(false)
+  showLocation Boolean @default(true)
+  showSocials  Boolean @default(true)
+
+  // Economy
+  balance Int @default(0)
+
+  joinedAt  DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  planet Planet @relation(fields: [planetId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, planetId])
+  @@index([userId])
+  @@index([planetId])
+}
+
+model Post {
+  id       String @id @default(uuid())
+  planetId String
+  authorId String
+
+  content String
+  images  String @default("[]")
+  tags    String @default("[]")
+
+  likeCount    Int @default(0)
+  commentCount Int @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  planet   Planet    @relation(fields: [planetId], references: [id], onDelete: Cascade)
+  author   User      @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  comments Comment[]
+  likes    Like[]
+
+  @@index([planetId, createdAt])
+  @@index([authorId])
+}
+
+model Comment {
+  id       String  @id @default(uuid())
+  postId   String
+  authorId String
+  parentId String?
+
+  content String
+
+  createdAt DateTime @default(now())
+
+  // Relations
+  post    Post      @relation(fields: [postId], references: [id], onDelete: Cascade)
+  author  User      @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  parent  Comment?  @relation("CommentReplies", fields: [parentId], references: [id])
+  replies Comment[] @relation("CommentReplies")
+
+  @@index([postId])
+}
+
+model Like {
+  id        String   @id @default(uuid())
+  postId    String
+  userId    String
+  createdAt DateTime @default(now())
+
+  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([postId, userId])
+}
+
+model Event {
+  id          String @id @default(uuid())
+  planetId    String
+  organizerId String
+
+  title       String
+  description String?
+  coverImage  String?
+
+  type     String
+  location String
+
+  startTime DateTime
+  endTime   DateTime?
+
+  attendeeCount Int @default(0)
+
+  // Approval status: pending, approved, rejected
+  status     String    @default("pending")
+  reviewedBy String?
+  reviewedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  planet    Planet      @relation(fields: [planetId], references: [id], onDelete: Cascade)
+  organizer User        @relation("Organizer", fields: [organizerId], references: [id])
+  rsvps     EventRsvp[]
+
+  @@index([planetId, startTime])
+  @@index([planetId, status])
+}
+
+model EventRsvp {
+  id        String   @id @default(uuid())
+  eventId   String
+  userId    String
+  status    String
+  name      String?
+  phone     String?
+  note      String?
+  createdAt DateTime @default(now())
+
+  event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([eventId, userId])
+}
+
+model Quest {
+  id       String @id @default(uuid())
+  planetId String
+
+  title       String
+  description String
+  type        String
+
+  actionType  String
+  actionCount Int
+
+  reward   Int
+  isActive Boolean @default(true)
+
+  createdAt DateTime @default(now())
+
+  planet   Planet          @relation(fields: [planetId], references: [id], onDelete: Cascade)
+  progress QuestProgress[]
+}
+
+model QuestProgress {
+  id      String @id @default(uuid())
+  questId String
+  userId  String
+
+  progress    Int       @default(0)
+  completed   Boolean   @default(false)
+  completedAt DateTime?
+
+  createdAt DateTime @default(now())
+
+  quest Quest @relation(fields: [questId], references: [id], onDelete: Cascade)
+
+  @@unique([questId, userId])
+}
+
+model ContactRequest {
+  id          String @id @default(uuid())
+  requesterId String
+  targetId    String
+  planetId    String
+
+  status String @default("pending")
+
+  createdAt   DateTime  @default(now())
+  respondedAt DateTime?
+}
+
+model Notification {
+  id     String @id @default(uuid())
+  userId String
+
+  type        String
+  relatedId   String?
+  relatedType String?
+
+  title   String
+  content String
+  isRead  Boolean @default(false)
+
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isRead])
+  @@index([userId, createdAt])
+}
+
+model SmsCode {
+  id      String @id @default(uuid())
+  phone   String
+  code    String
+  purpose String
+
+  expiredAt DateTime
+  used      Boolean  @default(false)
+
+  createdAt DateTime @default(now())
+
+  @@index([phone, code])
+}
+
+model AuthNonce {
+  id        String   @id @default(uuid())
+  address   String
+  nonce     String   @unique
+  chainType String   // "evm" or "solana"
+  expiredAt DateTime
+  used      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([address, chainType])
+  @@index([nonce])
+}
