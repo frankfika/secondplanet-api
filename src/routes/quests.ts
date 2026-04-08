@@ -48,13 +48,13 @@ quests.get('/planets/:planetId/quests', optionalAuthMiddleware, async (c) => {
       const progressList = await db.questProgress.findMany({
         where: {
           userId,
-          questId: { in: quests.map(q => q.id) },
+          questId: { in: quests.map((q: typeof quests[0]) => q.id) },
         },
       })
 
-      const progressMap = new Map(progressList.map(p => [p.questId, p]))
+      const progressMap = new Map(progressList.map((p: typeof progressList[0]) => [p.questId, p]))
 
-      result = quests.map(quest => ({
+      result = quests.map((quest: typeof quests[0]) => ({
         ...quest,
         myProgress: progressMap.get(quest.id) || {
           progress: 0,
@@ -92,17 +92,17 @@ quests.get('/planets/:planetId/quests/my-progress', authMiddleware, async (c) =>
     const progressList = await db.questProgress.findMany({
       where: {
         userId,
-        questId: { in: planetQuests.map(q => q.id) },
+        questId: { in: planetQuests.map((q: typeof planetQuests[0]) => q.id) },
       },
       include: { quest: true },
     })
 
     // Calculate stats
     const totalQuests = planetQuests.length
-    const completedQuests = progressList.filter(p => p.completed).length
+    const completedQuests = progressList.filter((p: typeof progressList[0]) => p.completed).length
     const totalRewards = progressList
-      .filter(p => p.completed)
-      .reduce((sum, p) => sum + (p.quest.reward || 0), 0)
+      .filter((p: typeof progressList[0]) => p.completed)
+      .reduce((sum: number, p: typeof progressList[0]) => sum + (p.quest.reward || 0), 0)
 
     return c.json({
       success: true,

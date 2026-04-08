@@ -4,6 +4,7 @@ import { zValidator } from '@hono/zod-validator'
 import { Env, Variables } from '../types/env'
 import { createPrismaClient } from '../lib/db'
 import { authMiddleware, optionalAuthMiddleware } from '../middleware/auth'
+import { notifyEventApproved, notifyEventRejected, notifyNewEventRsvp } from '../lib/notifications'
 
 const events = new Hono<{ Bindings: Env; Variables: Variables }>()
 
@@ -285,6 +286,18 @@ events.post('/events/:id/rsvp', authMiddleware, zValidator('json', rsvpSchema), 
       })
     }
 
+    // Notify event organizer
+    const attendee = await db.user.findUnique({ where: { id: userId }, select: { name: true } })
+    if (attendee && event.organizerId !== userId) {
+      await notifyNewEventRsvp(
+        c.env.DATABASE_URL,
+        event.organizerId,
+        attendee.name,
+        id,
+        event.title
+      )
+    }
+
     return c.json({ success: true, data: rsvp })
   } finally {
     await db.$disconnect()
@@ -342,6 +355,18 @@ events.post('/events/:id/approve', authMiddleware, async (c) => {
       },
     })
 
+    // Notify event organizer
+    const approver = await db.user.findUnique({ where: { id: userId }, select: { name: true } })
+    if (approver && event.organizerId !== userId) {
+      await notifyEventApproved(
+        c.env.DATABASE_URL,
+        id,
+        event.title,
+        event.organizerId,
+        approver.name
+      )
+    }
+
     return c.json({ success: true, data: updated })
   } finally {
     await db.$disconnect()
@@ -376,6 +401,18 @@ events.post('/events/:id/reject', authMiddleware, async (c) => {
         reviewedAt: new Date(),
       },
     })
+
+    // Notify event organizer
+    const rejecter = await db.user.findUnique({ where: { id: userId }, select: { name: true } })
+    if (rejecter && event.organizerId !== userId) {
+      await notifyEventRejected(
+        c.env.DATABASE_URL,
+        id,
+        event.title,
+        event.organizerId,
+        rejecter.name
+      )
+    }
 
     return c.json({ success: true, data: updated })
   } finally {

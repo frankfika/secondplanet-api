@@ -4,6 +4,7 @@ import { zValidator } from '@hono/zod-validator'
 import { Env, Variables } from '../types/env'
 import { createPrismaClient } from '../lib/db'
 import { authMiddleware } from '../middleware/auth'
+import { notifyRoleChanged } from '../lib/notifications'
 
 const members = new Hono<{ Bindings: Env; Variables: Variables }>()
 
@@ -153,6 +154,23 @@ members.patch('/planets/:planetId/members/:userId/role', authMiddleware, zValida
       where: { userId_planetId: { userId: targetUserId, planetId } },
       data: { role: body.role },
     })
+
+    // Notify target user about role change
+    const [changer, planet] = await Promise.all([
+      db.user.findUnique({ where: { id: userId }, select: { name: true } }),
+      db.planet.findUnique({ where: { id: planetId }, select: { name: true } }),
+    ])
+
+    if (changer && planet && targetUserId !== userId) {
+      await notifyRoleChanged(
+        c.env.DATABASE_URL,
+        targetUserId,
+        changer.name,
+        planetId,
+        planet.name,
+        body.role
+      )
+    }
 
     return c.json({ success: true, data: updated })
   } finally {

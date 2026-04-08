@@ -4,6 +4,7 @@ import { zValidator } from '@hono/zod-validator'
 import { Env, Variables } from '../types/env'
 import { createPrismaClient } from '../lib/db'
 import { authMiddleware, optionalAuthMiddleware } from '../middleware/auth'
+import { notifyPostLiked, notifyPostCommented, notifyCommentReplied } from '../lib/notifications'
 
 const posts = new Hono<{ Bindings: Env; Variables: Variables }>()
 
@@ -218,6 +219,20 @@ posts.post('/posts/:id/like', authMiddleware, async (c) => {
       })
     }
 
+    // Notify post author (don't notify if liking own post)
+    if (post.authorId !== userId) {
+      const liker = await db.user.findUnique({ where: { id: userId }, select: { name: true } })
+      if (liker) {
+        await notifyPostLiked(
+          c.env.DATABASE_URL,
+          post.authorId,
+          liker.name,
+          id,
+          post.content.slice(0, 30)
+        )
+      }
+    }
+
     return c.json({ success: true, message: 'Liked' })
   } finally {
     await db.$disconnect()
@@ -320,6 +335,39 @@ posts.post('/posts/:id/comments', authMiddleware, zValidator('json', createComme
         where: { userId, planetId: post.planetId },
         data: { balance: { increment: pointRules.comment } },
       })
+    }
+
+    // Notify post author or parent comment author
+    const commenter = await db.user.findUnique({ where: { id: userId }, select: { name: true } })
+    if (commenter) {
+      if (body.parentId) {
+        // This is a reply, notify the parent comment author
+        const parentComment = await db.comment.findUnique({
+          where: { id: body.parentId },
+          select: { authorId: true },
+        })
+        if (parentComment && parentComment.authorId !== userId) {
+          await notifyCommentReplied(
+            c.env.DATABASE_URL,
+            parentComment.authorId,
+            commenter.name,
+            postId,
+            body.content
+          )
+        }
+      } else {
+        // This is a top-level comment, notify post author
+        if (post.authorId !== userId) {
+          await notifyPostCommented(
+            c.env.DATABASE_URL,
+            post.authorId,
+            commenter.name,
+            postId,
+            body.content,
+            post.content.slice(0, 30)
+          )
+        }
+      }
     }
 
     return c.json({ success: true, data: comment })
