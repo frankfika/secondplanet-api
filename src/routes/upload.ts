@@ -1,8 +1,8 @@
 import { Hono } from 'hono'
-import { Env } from '../types/env'
+import { Env, Variables } from '../types/env'
 import { authMiddleware } from '../middleware/auth'
 
-const upload = new Hono<{ Bindings: Env }>()
+const upload = new Hono<{ Bindings: Env; Variables: Variables }>()
 
 // Upload file to R2
 upload.post('/', authMiddleware, async (c) => {
@@ -10,7 +10,7 @@ upload.post('/', authMiddleware, async (c) => {
 
   try {
     const formData = await c.req.formData()
-    const file = formData.get('file') as File
+    const file = formData.get('file') as unknown as File
 
     if (!file) {
       return c.json({ success: false, message: 'No file provided' }, 400)
@@ -32,8 +32,12 @@ upload.post('/', authMiddleware, async (c) => {
     const filename = `${userId}/${Date.now()}-${Math.random().toString(36).substring(7)}.${ext}`
 
     // Upload to R2
+    const bucket = c.env.UPLOADS
+    if (!bucket) {
+      return c.json({ success: false, message: 'Upload service not configured' }, 500)
+    }
     const arrayBuffer = await file.arrayBuffer()
-    await c.env.UPLOADS.put(filename, arrayBuffer, {
+    await bucket.put(filename, arrayBuffer, {
       httpMetadata: {
         contentType: file.type,
       },
@@ -63,7 +67,11 @@ upload.delete('/:filename', authMiddleware, async (c) => {
       return c.json({ success: false, message: 'Permission denied' }, 403)
     }
 
-    await c.env.UPLOADS.delete(filename)
+    const bucket = c.env.UPLOADS
+    if (!bucket) {
+      return c.json({ success: false, message: 'Upload service not configured' }, 500)
+    }
+    await bucket.delete(filename)
     return c.json({ success: true, message: 'File deleted' })
   } catch (error) {
     console.error('Delete error:', error)

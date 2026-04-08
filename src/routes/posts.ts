@@ -1,17 +1,22 @@
 import { Hono } from 'hono'
 import { z } from 'zod'
 import { zValidator } from '@hono/zod-validator'
-import { Env } from '../types/env'
+import { Env, Variables } from '../types/env'
 import { createPrismaClient } from '../lib/db'
 import { authMiddleware, optionalAuthMiddleware } from '../middleware/auth'
 
-const posts = new Hono<{ Bindings: Env }>()
+const posts = new Hono<{ Bindings: Env; Variables: Variables }>()
 
 // Create post schema
 const createPostSchema = z.object({
   content: z.string().min(1),
   images: z.array(z.string()).optional(),
   tags: z.array(z.string()).optional(),
+})
+
+const createCommentSchema = z.object({
+  content: z.string().min(1).max(2000),
+  parentId: z.string().optional(),
 })
 
 // List posts for a planet
@@ -39,7 +44,7 @@ posts.get('/planets/:planetId/posts', optionalAuthMiddleware, async (c) => {
       db.post.count({ where: { planetId } }),
     ])
 
-    const data = list.map((p) => ({
+    const data = list.map((p: typeof list[0]) => ({
       ...p,
       images: JSON.parse(p.images),
       tags: JSON.parse(p.tags),
@@ -49,8 +54,10 @@ posts.get('/planets/:planetId/posts', optionalAuthMiddleware, async (c) => {
 
     return c.json({
       success: true,
-      data,
-      pagination: { page, limit, total, pages: Math.ceil(total / limit) },
+      data: {
+        items: data,
+        pagination: { page, pageSize: limit, total, totalPages: Math.ceil(total / limit) },
+      },
     })
   } finally {
     await db.$disconnect()
@@ -275,10 +282,10 @@ posts.get('/posts/:id/comments', async (c) => {
 })
 
 // Create comment
-posts.post('/posts/:id/comments', authMiddleware, async (c) => {
+posts.post('/posts/:id/comments', authMiddleware, zValidator('json', createCommentSchema), async (c) => {
   const postId = c.req.param('id')
   const userId = c.get('userId')
-  const body = await c.req.json()
+  const body = c.req.valid('json')
   const db = createPrismaClient(c.env.DATABASE_URL)
 
   try {

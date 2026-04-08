@@ -10,6 +10,7 @@ import posts from './routes/posts'
 import events from './routes/events'
 import members from './routes/members'
 import upload from './routes/upload'
+import notifications from './routes/notifications'
 
 const app = new Hono<{ Bindings: Env }>()
 
@@ -36,6 +37,7 @@ app.route('/api', posts)  // Has /planets/:planetId/posts and /posts/:id routes
 app.route('/api', events) // Has /planets/:planetId/events and /events/:id routes
 app.route('/api', members) // Has /planets/:planetId/members routes
 app.route('/api/upload', upload)
+app.route('/api/notifications', notifications)
 
 // 404 handler
 app.notFound((c) => c.json({ success: false, message: 'Not found' }, 404))

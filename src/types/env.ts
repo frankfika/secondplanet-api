@@ -5,3 +5,9 @@ export interface Env {
   ENVIRONMENT: string
   UPLOADS?: R2Bucket
 }
+
+// Context variables set by auth middleware
+export interface Variables {
+  userId: string
+  userEmail?: string
+}

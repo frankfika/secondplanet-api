@@ -1,11 +1,11 @@
 import { Hono } from 'hono'
 import { z } from 'zod'
 import { zValidator } from '@hono/zod-validator'
-import { Env } from '../types/env'
+import { Env, Variables } from '../types/env'
 import { createPrismaClient } from '../lib/db'
 import { authMiddleware, optionalAuthMiddleware } from '../middleware/auth'
 
-const events = new Hono<{ Bindings: Env }>()
+const events = new Hono<{ Bindings: Env; Variables: Variables }>()
 
 // Create event schema
 const createEventSchema = z.object({
@@ -16,6 +16,24 @@ const createEventSchema = z.object({
   location: z.string().min(1),
   startTime: z.string(),
   endTime: z.string().optional(),
+})
+
+const updateEventSchema = z.object({
+  title: z.string().min(1).optional(),
+  description: z.string().optional(),
+  coverImage: z.string().optional(),
+  type: z.string().min(1).optional(),
+  location: z.string().min(1).optional(),
+  startTime: z.string().optional(),
+  endTime: z.string().optional(),
+  status: z.enum(['pending', 'approved', 'rejected']).optional(),
+})
+
+const rsvpSchema = z.object({
+  status: z.enum(['going', 'interested', 'not_going']).optional().default('going'),
+  name: z.string().max(100).optional(),
+  phone: z.string().max(30).optional(),
+  note: z.string().max(500).optional(),
 })
 
 // List events for a planet
@@ -47,8 +65,10 @@ events.get('/planets/:planetId/events', optionalAuthMiddleware, async (c) => {
 
     return c.json({
       success: true,
-      data: list,
-      pagination: { page, limit, total, pages: Math.ceil(total / limit) },
+      data: {
+        items: list,
+        pagination: { page, pageSize: limit, total, totalPages: Math.ceil(total / limit) },
+      },
     })
   } finally {
     await db.$disconnect()
@@ -138,10 +158,10 @@ events.get('/events/:id', optionalAuthMiddleware, async (c) => {
 })
 
 // Update event
-events.patch('/events/:id', authMiddleware, async (c) => {
+events.patch('/events/:id', authMiddleware, zValidator('json', updateEventSchema), async (c) => {
   const id = c.req.param('id')
   const userId = c.get('userId')
-  const body = await c.req.json()
+  const body = c.req.valid('json')
   const db = createPrismaClient(c.env.DATABASE_URL)
 
   try {
@@ -205,10 +225,10 @@ events.delete('/events/:id', authMiddleware, async (c) => {
 })
 
 // RSVP to event
-events.post('/events/:id/rsvp', authMiddleware, async (c) => {
+events.post('/events/:id/rsvp', authMiddleware, zValidator('json', rsvpSchema), async (c) => {
   const id = c.req.param('id')
   const userId = c.get('userId')
-  const body = await c.req.json()
+  const body = c.req.valid('json')
   const db = createPrismaClient(c.env.DATABASE_URL)
 
   try {

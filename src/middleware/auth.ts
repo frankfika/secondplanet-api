@@ -1,8 +1,8 @@
 import { Context, Next } from 'hono'
 import { verifyToken } from '../lib/auth'
-import { Env } from '../types/env'
+import { Env, Variables } from '../types/env'
 
-export async function authMiddleware(c: Context<{ Bindings: Env }>, next: Next) {
+export async function authMiddleware(c: Context<{ Bindings: Env; Variables: Variables }>, next: Next) {
   const authHeader = c.req.header('Authorization')
 
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
@@ -22,7 +22,7 @@ export async function authMiddleware(c: Context<{ Bindings: Env }>, next: Next) 
   await next()
 }
 
-export async function optionalAuthMiddleware(c: Context<{ Bindings: Env }>, next: Next) {
+export async function optionalAuthMiddleware(c: Context<{ Bindings: Env; Variables: Variables }>, next: Next) {
   const authHeader = c.req.header('Authorization')
 
   if (authHeader && authHeader.startsWith('Bearer ')) {

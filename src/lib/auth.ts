@@ -43,7 +43,7 @@ export async function verifyToken(token: string, secret: string): Promise<JwtPay
   try {
     const secretKey = encoder.encode(secret)
     const { payload } = await jwtVerify(token, secretKey)
-    return payload as JwtPayload
+    return payload as unknown as JwtPayload
   } catch {
     return null
   }

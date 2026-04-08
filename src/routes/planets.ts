@@ -1,11 +1,11 @@
 import { Hono } from 'hono'
 import { z } from 'zod'
 import { zValidator } from '@hono/zod-validator'
-import { Env } from '../types/env'
+import { Env, Variables } from '../types/env'
 import { createPrismaClient } from '../lib/db'
 import { authMiddleware, optionalAuthMiddleware } from '../middleware/auth'
 
-const planets = new Hono<{ Bindings: Env }>()
+const planets = new Hono<{ Bindings: Env; Variables: Variables }>()
 
 // Create planet schema
 const createPlanetSchema = z.object({
@@ -18,6 +18,23 @@ const createPlanetSchema = z.object({
   visibility: z.enum(['public', 'private']).optional(),
   currencyName: z.string().optional(),
   currencySymbol: z.string().optional(),
+})
+
+const updatePlanetSchema = z.object({
+  name: z.string().min(1).optional(),
+  description: z.string().optional(),
+  coverImage: z.string().optional(),
+  icon: z.string().optional(),
+  announcement: z.string().optional(),
+  visibility: z.enum(['public', 'private']).optional(),
+  currencyName: z.string().optional(),
+  currencySymbol: z.string().optional(),
+  constitution: z.string().optional(),
+  pointRules: z.string().optional(),
+})
+
+const transferOwnershipSchema = z.object({
+  newOwnerId: z.string().min(1),
 })
 
 // List planets
@@ -65,7 +82,7 @@ planets.get('/my', authMiddleware, async (c) => {
       orderBy: { joinedAt: 'desc' },
     })
 
-    const list = memberships.map((m) => ({
+    const list = memberships.map((m: { planet: { [key: string]: any }, role: string, joinedAt: Date }) => ({
       ...m.planet,
       role: m.role,
       joinedAt: m.joinedAt,
@@ -154,10 +171,10 @@ planets.post('/', authMiddleware, zValidator('json', createPlanetSchema), async 
 })
 
 // Update planet
-planets.patch('/:id', authMiddleware, async (c) => {
+planets.patch('/:id', authMiddleware, zValidator('json', updatePlanetSchema), async (c) => {
   const id = c.req.param('id')
   const userId = c.get('userId')
-  const body = await c.req.json()
+  const body = c.req.valid('json')
   const db = createPrismaClient(c.env.DATABASE_URL)
 
   try {
@@ -307,18 +324,13 @@ planets.post('/:id/regenerate-code', authMiddleware, async (c) => {
 })
 
 // Transfer ownership
-planets.post('/:id/transfer-ownership', authMiddleware, async (c) => {
+planets.post('/:id/transfer-ownership', authMiddleware, zValidator('json', transferOwnershipSchema), async (c) => {
   const id = c.req.param('id')
   const userId = c.get('userId')
-  const body = await c.req.json()
-  const { newOwnerId } = body
+  const { newOwnerId } = c.req.valid('json')
   const db = createPrismaClient(c.env.DATABASE_URL)
 
   try {
-    if (!newOwnerId) {
-      return c.json({ success: false, message: 'newOwnerId is required' }, 400)
-    }
-
     // Check current user is starLord
     const myMembership = await db.membership.findUnique({
       where: { userId_planetId: { userId, planetId: id } },

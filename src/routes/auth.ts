@@ -1,7 +1,7 @@
 import { Hono } from 'hono'
 import { z } from 'zod'
 import { zValidator } from '@hono/zod-validator'
-import { Env } from '../types/env'
+import { Env, Variables } from '../types/env'
 import { createPrismaClient } from '../lib/db'
 import { signToken, hashPassword, verifyPassword, verifyToken, generateNonce, buildSignMessage, generateAvatarFromAddress } from '../lib/auth'
 import { authMiddleware } from '../middleware/auth'
@@ -9,7 +9,7 @@ import nacl from 'tweetnacl'
 import bs58 from 'bs58'
 import { ethers } from 'ethers'
 
-const auth = new Hono<{ Bindings: Env }>()
+const auth = new Hono<{ Bindings: Env; Variables: Variables }>()
 
 // ============ Schemas ============
 
@@ -47,6 +47,12 @@ const updateProfileSchema = z.object({
   name: z.string().min(1).optional(),
   avatar: z.string().optional(),
   location: z.string().optional(),
+})
+
+const wechatLoginSchema = z.object({
+  code: z.string().min(1),
+  encryptedData: z.string().optional(),
+  iv: z.string().optional(),
 })
 
 // Helper: sanitize user response
@@ -347,6 +353,48 @@ auth.post('/solana', zValidator('json', solanaAuthSchema), async (c) => {
   }
 })
 
+// WeChat Mini Program login
+auth.post('/wechat', zValidator('json', wechatLoginSchema), async (c) => {
+  const { code, encryptedData, iv } = c.req.valid('json')
+  const db = createPrismaClient(c.env.DATABASE_URL)
+
+  try {
+    // In production, this would call WeChat API to exchange code for phone number
+    // For now, we'll use a mock implementation
+    // TODO: Implement real WeChat API integration
+    const mockPhoneNumber = `wx_${code.slice(0, 8)}`
+
+    // Find or create user by phone
+    let user = await db.user.findFirst({
+      where: { phone: mockPhoneNumber },
+    })
+
+    if (!user) {
+      user = await db.user.create({
+        data: {
+          phone: mockPhoneNumber,
+          name: `User_${mockPhoneNumber.slice(-6)}`,
+          avatar: generateAvatarFromAddress(mockPhoneNumber),
+        },
+      })
+    }
+
+    const accessToken = await signToken({ userId: user.id }, c.env.JWT_SECRET, '7d')
+    const refreshToken = await signToken({ userId: user.id }, c.env.JWT_REFRESH_SECRET, '30d')
+
+    return c.json({
+      success: true,
+      data: {
+        user: sanitizeUser(user),
+        accessToken,
+        refreshToken,
+      },
+    })
+  } finally {
+    await db.$disconnect()
+  }
+})
+
 // EVM wallet authentication
 auth.post('/evm', zValidator('json', evmAuthSchema), async (c) => {
   const { address, signature, message } = c.req.valid('json')
@@ -419,6 +467,44 @@ auth.post('/evm', zValidator('json', evmAuthSchema), async (c) => {
         refreshToken,
       },
     })
+  } finally {
+    await db.$disconnect()
+  }
+})
+
+// Delete account
+auth.delete('/me', authMiddleware, async (c) => {
+  const userId = c.get('userId')
+  const db = createPrismaClient(c.env.DATABASE_URL)
+
+  try {
+    // Delete related data first (memberships, posts, events, etc.)
+    await db.$transaction(async (tx: typeof db) => {
+      // Delete likes
+      await tx.like.deleteMany({ where: { userId } })
+      // Delete comments
+      await tx.comment.deleteMany({ where: { authorId: userId } })
+      // Delete event RSVPs
+      await tx.eventRsvp.deleteMany({ where: { userId } })
+      // Delete events organized by user (but keep the record)
+      await tx.event.updateMany({
+        where: { organizerId: userId },
+        data: { organizerId: '', description: 'This event was created by a deleted account' },
+      })
+      // Delete posts by user
+      await tx.post.deleteMany({ where: { authorId: userId } })
+      // Delete memberships
+      await tx.membership.deleteMany({ where: { userId } })
+      // Delete auth nonces
+      await tx.authNonce.deleteMany({ where: { userId } })
+      // Finally delete the user
+      await tx.user.delete({ where: { id: userId } })
+    })
+
+    return c.json({ success: true, message: 'Account deleted successfully' })
+  } catch (error) {
+    console.error('Delete account error:', error)
+    return c.json({ success: false, message: 'Failed to delete account' }, 500)
   } finally {
     await db.$disconnect()
   }

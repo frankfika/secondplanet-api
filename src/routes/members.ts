@@ -1,9 +1,26 @@
 import { Hono } from 'hono'
-import { Env } from '../types/env'
+import { z } from 'zod'
+import { zValidator } from '@hono/zod-validator'
+import { Env, Variables } from '../types/env'
 import { createPrismaClient } from '../lib/db'
 import { authMiddleware } from '../middleware/auth'
 
-const members = new Hono<{ Bindings: Env }>()
+const members = new Hono<{ Bindings: Env; Variables: Variables }>()
+
+const updateProfileSchema = z.object({
+  nickname: z.string().min(1).max(50).optional(),
+  bio: z.string().max(500).optional(),
+  localAvatar: z.string().url().optional(),
+  status: z.string().max(100).optional(),
+  showEmail: z.boolean().optional(),
+  showPhone: z.boolean().optional(),
+  showLocation: z.boolean().optional(),
+  showSocials: z.boolean().optional(),
+})
+
+const updateRoleSchema = z.object({
+  role: z.enum(['elder', 'pioneer', 'citizen']),
+})
 
 // List members of a planet
 members.get('/planets/:planetId/members', async (c) => {
@@ -30,8 +47,10 @@ members.get('/planets/:planetId/members', async (c) => {
 
     return c.json({
       success: true,
-      data: list,
-      pagination: { page, limit, total, pages: Math.ceil(total / limit) },
+      data: {
+        items: list,
+        pagination: { page, pageSize: limit, total, totalPages: Math.ceil(total / limit) },
+      },
     })
   } finally {
     await db.$disconnect()
@@ -65,10 +84,10 @@ members.get('/planets/:planetId/members/:userId', async (c) => {
 })
 
 // Update my membership profile
-members.patch('/planets/:planetId/members/me', authMiddleware, async (c) => {
+members.patch('/planets/:planetId/members/me', authMiddleware, zValidator('json', updateProfileSchema), async (c) => {
   const planetId = c.req.param('planetId')
   const userId = c.get('userId')
-  const body = await c.req.json()
+  const body = c.req.valid('json')
   const db = createPrismaClient(c.env.DATABASE_URL)
 
   try {
@@ -101,11 +120,11 @@ members.patch('/planets/:planetId/members/me', authMiddleware, async (c) => {
 })
 
 // Update member role (admin only)
-members.patch('/planets/:planetId/members/:userId/role', authMiddleware, async (c) => {
+members.patch('/planets/:planetId/members/:userId/role', authMiddleware, zValidator('json', updateRoleSchema), async (c) => {
   const planetId = c.req.param('planetId')
   const targetUserId = c.req.param('userId')
   const userId = c.get('userId')
-  const body = await c.req.json()
+  const body = c.req.valid('json')
   const db = createPrismaClient(c.env.DATABASE_URL)
 
   try {

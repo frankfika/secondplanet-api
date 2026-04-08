@@ -1,11 +1,11 @@
 import { Hono } from 'hono'
 import { z } from 'zod'
 import { zValidator } from '@hono/zod-validator'
-import { Env } from '../types/env'
+import { Env, Variables } from '../types/env'
 import { createPrismaClient } from '../lib/db'
 import { authMiddleware } from '../middleware/auth'
 
-const users = new Hono<{ Bindings: Env }>()
+const users = new Hono<{ Bindings: Env; Variables: Variables }>()
 
 // Update current user
 const updateUserSchema = z.object({
@@ -97,6 +97,44 @@ users.get('/me/memberships', authMiddleware, async (c) => {
   }
 })
 
+// Get current user's events (RSVPed events)
+users.get('/me/events', authMiddleware, async (c) => {
+  const userId = c.get('userId')
+  const db = createPrismaClient(c.env.DATABASE_URL)
+
+  try {
+    const rsvps = await db.eventRsvp.findMany({
+      where: {
+        userId,
+        status: 'going',
+      },
+      include: {
+        event: {
+          include: {
+            organizer: {
+              select: { id: true, name: true, avatar: true },
+            },
+            planet: {
+              select: { id: true, name: true, icon: true },
+            },
+          },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+    })
+
+    const events = rsvps.map((rsvp: typeof rsvps[0]) => ({
+      ...rsvp.event,
+      myRsvp: rsvp.status,
+      rsvpAt: rsvp.createdAt,
+    }))
+
+    return c.json({ success: true, data: events })
+  } finally {
+    await db.$disconnect()
+  }
+})
+
 // Get current user's assets (balance across all planets)
 users.get('/me/assets', authMiddleware, async (c) => {
   const userId = c.get('userId')
@@ -118,7 +156,7 @@ users.get('/me/assets', authMiddleware, async (c) => {
       },
     })
 
-    const assets = memberships.map((m) => ({
+    const assets = memberships.map((m: typeof memberships[0]) => ({
       planetId: m.planet.id,
       planetName: m.planet.name,
       currencyName: m.planet.currencyName,
