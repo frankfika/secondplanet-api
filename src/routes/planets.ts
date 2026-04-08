@@ -57,6 +57,7 @@ planets.get('/', optionalAuthMiddleware, async (c) => {
         coverImage: true,
         icon: true,
         memberCount: true,
+        visibility: true,
         createdAt: true,
       },
       orderBy: { memberCount: 'desc' },

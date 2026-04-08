@@ -18,7 +18,7 @@ const app = new Hono<{ Bindings: Env }>()
 // Middleware
 app.use('*', logger())
 app.use('*', cors({
-  origin: ['https://secondplanet.app', 'https://www.secondplanet.app', 'http://localhost:5173', 'http://localhost:3000'],
+  origin: ['https://secondplanet.app', 'https://www.secondplanet.app', 'http://localhost:5173', 'http://localhost:5174', 'http://localhost:3000'],
   allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowHeaders: ['Content-Type', 'Authorization'],
   exposeHeaders: ['Content-Length'],
