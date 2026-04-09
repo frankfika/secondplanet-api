@@ -40,11 +40,20 @@ const transferOwnershipSchema = z.object({
 // List planets
 planets.get('/', optionalAuthMiddleware, async (c) => {
   const category = c.req.query('category')
+  const search = c.req.query('search')
   const db = createPrismaClient(c.env.DATABASE_URL)
 
   try {
     const where: any = { visibility: 'public' }
     if (category) where.category = category
+
+    // 搜索功能：按名称或描述搜索
+    if (search) {
+      where.OR = [
+        { name: { contains: search, mode: 'insensitive' } },
+        { description: { contains: search, mode: 'insensitive' } },
+      ]
+    }
 
     const list = await db.planet.findMany({
       where,
